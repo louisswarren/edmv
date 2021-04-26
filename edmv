@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import tempfile
+import sys
+
+EDITOR_PATH = os.environ.get('EDITOR', 'vim')
+
+def run_editor(s):
+    """Co-routine for editing a temporary file. Trims trailing newline."""
+    with tempfile.NamedTemporaryFile(suffix='.tmp') as f:
+        f.write(s.encode())
+        f.flush()
+        while True:
+            if subprocess.call(EDITOR_PATH.split() + [f.name]):
+                return
+            f.seek(0)
+            doc = f.read().decode()
+            if doc[-1] == '\n':
+                doc = doc[:-1]
+            yield doc
+
+def names_to_doc(names):
+    return '\n'.join(x.replace('\n', '\0') for x in names)
+
+def doc_to_names(doc):
+    return [x.replace('\0', '\n') for x in doc.split('\n')]
+
+def validate_names(dests, n):
+    if not all(dests):
+        print(f"Cannot rename to empty filename.", file=sys.stderr)
+        return False
+    if len(dests) != n:
+        print(f"Different number of of new and old names.", file=sys.stderr)
+        return False
+    if len(dests) != len(set(dests)):
+        print(f"Filenames must all be unique.", file=sys.stderr)
+        return False
+    return True
+
+def prompt_abort():
+    while (choice := input("Re-edit? [Y/n] ")).lower() not in 'yn':
+        continue
+    return choice == 'n'
+
+def get_new_names(sources):
+    """Returns a list of destinations, or None if the user aborts."""
+    editor = run_editor(names_to_doc(sources))
+    for dest_doc in editor:
+        dests = doc_to_names(dest_doc)
+        if validate_names(dests, len(sources)):
+            return dests
+        if prompt_abort():
+            break
+
+def edmv(sources):
+    dests = get_new_names(sources)
+    if dests:
+        for old, new in zip(sources, dests):
+            os.rename(old, new)
+    return dests
+
+if __name__ == '__main__':
+    args = sys.argv[1:] or sorted(os.listdir())
+    if not edmv(args):
+        sys.exit(1)
