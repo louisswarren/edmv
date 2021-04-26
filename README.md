@@ -2,10 +2,11 @@
 Move (rename) files using your text editor
 
 Usage:
-  edmv
-  edmv SOURCES
 
-With no argument, use all files in the current working directory as `SOURCES`.
+    edmv
+    edmv SOURCES
+
+With no argument, uses all files in the current working directory as `SOURCES`.
 
 Opens your `EDITOR` on a temporary file listing all of the paths in `SOURCES`.
 If your editor exits normally, moves the source files to the new paths
