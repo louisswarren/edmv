@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import sys
+import uuid
 
 EDITOR_PATH = os.environ.get('EDITOR', 'vim')
 
@@ -27,15 +28,18 @@ def names_to_doc(names):
 def doc_to_names(doc):
     return [x.replace('\0', '\n') for x in doc.split('\n')]
 
-def validate_names(dests, n):
+def validate_names(dests, sources):
     if not all(dests):
         print(f"Cannot rename to empty filename.", file=sys.stderr)
         return False
-    if len(dests) != n:
+    if len(dests) != len(sources):
         print(f"Different number of of new and old names.", file=sys.stderr)
         return False
     if len(dests) != len(set(dests)):
         print(f"Filenames must all be unique.", file=sys.stderr)
+        return False
+    if any(os.path.exists(d) and d not in sources for d in dests):
+        print("Path exists already.")
         return False
     return True
 
@@ -49,16 +53,27 @@ def get_new_names(sources):
     editor = run_editor(names_to_doc(sources))
     for dest_doc in editor:
         dests = doc_to_names(dest_doc)
-        if validate_names(dests, len(sources)):
+        if validate_names(dests, sources):
             return dests
         if prompt_abort():
             break
 
 def edmv(sources):
+    if any(not os.path.exists(s) for s in sources):
+        print("Error: path does not exist", file=sys.stderr)
+        return sources
     dests = get_new_names(sources)
     if dests:
-        for old, new in zip(sources, dests):
-            os.rename(old, new)
+        # Generate a unique prefix, to remove later
+        prefix = str(uuid.uuid4())
+        renamed = []
+        try:
+            for old, new in zip(sources, dests):
+                os.rename(old, prefix + new)
+                renamed.append(new)
+        finally:
+            for fname in renamed:
+                os.rename(prefix + fname, fname)
     return dests
 
 if __name__ == '__main__':
