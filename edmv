@@ -30,11 +30,11 @@ def names_to_doc(names):
 def doc_to_names(doc):
     return [x.replace('\0', '\n') for x in doc.split('\n')]
 
-def validate_names(dests, sources):
+def validate_names(sources, dests):
     if len(dests) != len(sources):
         eprint(f"Got {len(dests)} new paths (expected {len(sources)}).\n")
         return False
-    if (paths := [s for d, s in zip(dests, sources) if not d]):
+    if (paths := [s for s, d in zip(sources, dests) if not d]):
         eprint("Cannot rename to empty path:\n" + "\n".join(paths) + "\n")
         return False
     if (paths := [d for i, d in enumerate(dests) if d in dests[i+1:]]):
@@ -55,7 +55,7 @@ def get_new_names(sources):
     editor = run_editor(names_to_doc(sources))
     for dest_doc in editor:
         dests = doc_to_names(dest_doc)
-        if validate_names(dests, sources):
+        if validate_names(sources, dests):
             return dests
         if prompt_abort():
             break
@@ -66,16 +66,18 @@ def edmv(sources):
         return sources
     dests = get_new_names(sources)
     if dests:
-        # Generate a unique prefix, to remove later
-        prefix = str(uuid.uuid4())
-        renamed = []
+        temp_paths = {}
         try:
-            for old, new in zip(sources, dests):
-                os.rename(old, prefix + new)
-                renamed.append(new)
+            for s, d in zip(sources, dests):
+                if os.path.exists(d):
+                    temp_paths[d] = d
+                    while os.path.exists(temp_paths[d]):
+                        temp_paths[d] += '.edmv'
+                    d = temp_paths[d]
+                os.rename(s, d)
         finally:
-            for fname in renamed:
-                os.rename(prefix + fname, fname)
+            for d in temp_paths:
+                os.rename(temp_paths[d], d)
     return dests
 
 if __name__ == '__main__':
