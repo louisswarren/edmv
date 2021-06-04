@@ -8,6 +8,8 @@ import uuid
 
 EDITOR_PATH = os.environ.get('EDITOR', 'vim')
 
+eprint = lambda *args, **kwargs: print(*args, **kwargs, file=sys.stderr)
+
 def run_editor(s):
     """Co-routine for editing a temporary file. Trims trailing newline."""
     with tempfile.NamedTemporaryFile(suffix='.tmp') as f:
@@ -29,17 +31,17 @@ def doc_to_names(doc):
     return [x.replace('\0', '\n') for x in doc.split('\n')]
 
 def validate_names(dests, sources):
-    if not all(dests):
-        print(f"Cannot rename to empty filename.", file=sys.stderr)
-        return False
     if len(dests) != len(sources):
-        print(f"Different number of of new and old names.", file=sys.stderr)
+        eprint(f"Got {len(dests)} new paths (expected {len(sources)}).\n")
         return False
-    if len(dests) != len(set(dests)):
-        print(f"Filenames must all be unique.", file=sys.stderr)
+    if (paths := [s for d, s in zip(dests, sources) if not d]):
+        eprint("Cannot rename to empty path:\n" + "\n".join(paths) + "\n")
         return False
-    if any(os.path.exists(d) and d not in sources for d in dests):
-        print("Path exists already.")
+    if (paths := [d for i, d in enumerate(dests) if d in dests[i+1:]]):
+        eprint(f"Paths must all be unique:\n" + "\n".join(paths) + "\n")
+        return False
+    if (paths := [d for d in dests if os.path.exists(d) and d not in sources]):
+        eprint("Path already exists already:\n" + "\n".join(paths) + "\n")
         return False
     return True
 
