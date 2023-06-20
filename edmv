@@ -1,48 +1,52 @@
 #!/usr/bin/env python3
 
 import os
+import shlex
 import subprocess
-import tempfile
 import sys
+import tempfile
 import uuid
 
-EDITOR_PATH = os.environ.get('EDITOR', 'vim')
+def default_editor(path):
+    editor = os.environ.get('EDITOR', 'vi')
+    cmd = editor + ' ' + shlex.quote(path)
+    return subprocess.call(cmd, shell=True)
 
-eprint = lambda *args, **kwargs: print(*args, **kwargs, file=sys.stderr)
-
-def run_editor(s):
+def run_editor(contents, editor):
     """Co-routine for editing a temporary file. Trims trailing newline."""
-    with tempfile.NamedTemporaryFile(suffix='.tmp') as f:
-        f.write(s.encode())
+    with tempfile.NamedTemporaryFile('w+', suffix='.tmp') as f:
+        f.write(contents)
         f.flush()
         while True:
-            if subprocess.call(EDITOR_PATH.split() + [f.name]):
+            if editor(f.name):
                 return
             f.seek(0)
-            doc = f.read().decode()
+            doc = f.read()
             if doc[-1] == '\n':
                 doc = doc[:-1]
             yield doc
 
-def names_to_doc(names):
-    return '\n'.join(x.replace('\n', '\0') for x in names)
-
-def doc_to_names(doc):
-    return [x.replace('\0', '\n') for x in doc.split('\n')]
-
 def validate_names(sources, dests):
+    eprint = lambda *args: print(*args, file=sys.stderr)
+
     if len(dests) != len(sources):
-        eprint(f"Got {len(dests)} new paths (expected {len(sources)}).\n")
+        eprint(f"Got {len(dests)} new paths (expected {len(sources)}).")
         return False
+
     if (paths := [s for s, d in zip(sources, dests) if not d]):
-        eprint("Cannot rename to empty path:\n" + "\n".join(paths) + "\n")
+        eprint("Cannot rename to empty path:")
+        eprint("\n".join(paths))
         return False
-    if (paths := [d for i, d in enumerate(dests) if d in dests[i+1:]]):
-        eprint(f"Paths must all be unique:\n" + "\n".join(paths) + "\n")
+
+    if (paths := {d for i, d in enumerate(dests) if d in dests[i+1:]}):
+        eprint(f"Paths must all be unique:")
+        eprint("\n".join(paths))
         return False
+
     if (paths := [d for d in dests if os.path.exists(d) and d not in sources]):
-        eprint("Path already exists already:\n" + "\n".join(paths) + "\n")
+        eprint("Path already exists already:\n" + "\n".join(paths))
         return False
+
     return True
 
 def prompt_abort():
@@ -50,37 +54,57 @@ def prompt_abort():
         continue
     return choice == 'n'
 
-def get_new_names(sources):
+def get_destinations(sources, editor):
     """Returns a list of destinations, or None if the user aborts."""
-    editor = run_editor(names_to_doc(sources))
-    for dest_doc in editor:
-        dests = doc_to_names(dest_doc)
+    source_doc = '\n'.join(src.replace('\n', '\0') for src in sources)
+    for contents in run_editor(source_doc, editor):
+        dests = [line.replace('\0', '\n') for line in contents.split('\n')]
         if validate_names(sources, dests):
             return dests
         if prompt_abort():
             break
 
-def edmv(sources):
-    if any(not os.path.exists(s) for s in sources):
-        print("Error: path does not exist", file=sys.stderr)
-        return sources
-    dests = get_new_names(sources)
-    if dests:
-        temp_paths = {}
-        try:
-            for s, d in zip(sources, dests):
-                if os.path.exists(d):
-                    temp_paths[d] = d
-                    while os.path.exists(temp_paths[d]):
-                        temp_paths[d] += '.edmv'
-                    d = temp_paths[d]
-                os.rename(s, d)
-        finally:
-            for d in temp_paths:
-                os.rename(temp_paths[d], d)
-    return dests
+def edmv(sources, editor = default_editor, mv = os.rename):
+    dests = get_destinations(sources, editor)
+    if not dests:
+        return False
+
+    undo_stack = []
+    decycle_queue = []
+    try:
+        for s, d in zip(sources, dests):
+            if s == d:
+                continue
+            if d in sources:
+                u = str(uuid.uuid4())
+                tmp = f"{d}.{u}.edmv"
+                decycle_queue.append((tmp, d))
+                d = tmp
+            if os.path.exists(d):
+                raise Exception(f"{d} already exists")
+            mv(s, d)
+            undo_stack.append((s, d))
+        for s, d in decycle_queue:
+            if os.path.exists(d):
+                raise Exception(f"{d} already exists")
+            mv(s, d)
+            undo_stack.append((s, d))
+    except Exception as e:
+        print("Error:", e, file=sys.stderr)
+        if undo_stack:
+            print("Undoing...", file=sys.stderr)
+        while undo_stack:
+            s, d = undo_stack.pop()
+            mv(d, s)
+        return False
+
+    return True
 
 if __name__ == '__main__':
     args = sys.argv[1:] or sorted(os.listdir())
+    if any(not os.path.exists(s) for s in args):
+        print("Error: path does not exist", file=sys.stderr)
+        sys.exit(1)
+
     if not edmv(args):
         sys.exit(1)
