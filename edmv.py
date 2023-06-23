@@ -22,6 +22,8 @@ def run_editor(contents, editor):
                 return
             f.seek(0)
             doc = f.read()
+            if not doc.replace('\n', ''):
+                return
             if doc[-1] == '\n':
                 doc = doc[:-1]
             yield doc
