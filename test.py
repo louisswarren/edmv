@@ -35,6 +35,7 @@ def run_trial(sources, destinations, retries=0):
         sys.stdout = stdout
         sys.stdin = stdin
 
+
 class TrialTestRaw():
     retries = 0
 
@@ -63,6 +64,7 @@ class TrialTestRaw():
         else:
             self.assertEqual(self.stderr, "")
 
+
 class TrialTest(TrialTestRaw):
     def setUp(self):
         sources = [x[0] for x in self.moves]
@@ -70,28 +72,29 @@ class TrialTest(TrialTestRaw):
         result = run_trial(sources, contents, self.retries)
         self.mv_log, self.status, self.stdout, self.stderr = result
 
+
 class TestNormal(TrialTest, unittest.TestCase):
     moves = (
         ('a', 'b'),
         ('c', 'c'),
     )
-
     expected_moves = (
         ('a', 'b'),
     )
+
 
 class TestCycling(TrialTest, unittest.TestCase):
     moves = (
         ('a', 'b'),
         ('b', 'a'),
     )
-
     expected_moves = (
         ('a', 'b.[UUID].edmv'),
         ('b', 'a.[UUID].edmv'),
         ('b.[UUID].edmv', 'b'),
         ('a.[UUID].edmv', 'a'),
     )
+
 
 class TestMixture(TrialTest, unittest.TestCase):
     moves = (
@@ -101,7 +104,6 @@ class TestMixture(TrialTest, unittest.TestCase):
         ('1', '1'),
         ('2', '3'),
     )
-
     expected_moves = (
         ('a', 'b.[UUID].edmv'),
         ('b', 'c.[UUID].edmv'),
@@ -110,6 +112,14 @@ class TestMixture(TrialTest, unittest.TestCase):
         ('b.[UUID].edmv', 'b'),
         ('c.[UUID].edmv', 'c'),
         ('a.[UUID].edmv', 'a'),
+    )
+
+class TestNewlines(TrialTest, unittest.TestCase):
+    moves = (
+        ('a\n123', 'b\0''456'),
+    )
+    expected_moves = (
+        ('a\n123', 'b\n456'),
     )
 
 class TestFailAndUndo(TrialTest, unittest.TestCase):
@@ -122,7 +132,6 @@ class TestFailAndUndo(TrialTest, unittest.TestCase):
         ('5', 'ERROR'),
         ('6', '7'),
     )
-
     expected_moves = (
         ('a', 'b.[UUID].edmv'),
         ('b', 'c.[UUID].edmv'),
@@ -133,122 +142,103 @@ class TestFailAndUndo(TrialTest, unittest.TestCase):
         ('c.[UUID].edmv', 'b'),
         ('b.[UUID].edmv', 'a'),
     )
-
     expected_stderr = (
         "Error: Simulated error\n"
         "Undoing...\n"
     )
-
     expected_status = False
+
 
 class TestEmptyDestExits(TrialTestRaw, unittest.TestCase):
     sources = (
         'a',
     )
-
     destinations = (
         '',
     )
-
     expected_moves = (
     )
-
     expected_status = False
+
 
 class TestExtraPath(TrialTestRaw, unittest.TestCase):
     sources = (
         'a',
     )
-
     destinations = (
         'a',
         'b',
     )
-
     expected_moves = (
     )
-
     expected_stdout = (
         "Re-edit? [Y/n] "
     )
-
     expected_stderr = (
         "Got 2 new paths (expected 1).\n"
     )
-
     expected_status = False
+
 
 class TestMissingPath(TrialTestRaw, unittest.TestCase):
     sources = (
         'a',
         'b',
     )
-
     destinations = (
         'a',
     )
-
     expected_moves = (
     )
-
     expected_stdout = (
         "Re-edit? [Y/n] "
     )
-
     expected_stderr = (
         "Got 1 new paths (expected 2).\n"
     )
 
     expected_status = False
 
+
 class TestEmptyPath(TrialTestRaw, unittest.TestCase):
     sources = (
         'a',
         'b',
     )
-
     destinations = (
         '',
         'c',
     )
-
     expected_moves = (
     )
-
     expected_stdout = (
         "Re-edit? [Y/n] "
     )
-
     expected_stderr = (
             "Cannot rename to empty path:\n"
             "a\n"
     )
-
     expected_status = False
+
 
 class TestDuplicatePaths(TrialTestRaw, unittest.TestCase):
     sources = (
         'a',
         'b',
     )
-
     destinations = (
         'c',
         'c',
     )
-
     expected_moves = (
     )
-
     expected_stdout = (
         "Re-edit? [Y/n] "
     )
-
     expected_stderr = (
         "Paths must all be unique:\n"
         "c\n"
     )
-
     expected_status = False
 
 if __name__ == '__main__':
